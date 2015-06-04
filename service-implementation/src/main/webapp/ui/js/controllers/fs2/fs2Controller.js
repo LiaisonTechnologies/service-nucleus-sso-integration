@@ -1,7 +1,51 @@
 'use strict'
 
-var fs2Controller = myApp.controller('FS2Controller', ['$scope', '$routeParams', '$http', function ($scope, $routeParams, $http) {
+// HACK: Using FS2 controller
 
+var fs2Controller = myApp.controller('FS2Controller', ['$scope', '$routeParams', '$http', '$location', function ($scope, $routeParams, $http, $location) {
+	
+	
+	// called by init 
+	 $scope.getUserInformation = function () {
+         var url = 'rest/v1/hello/to/{token}")';
+         
+         var okt = JSON.stringify($location);
+         //console.log("okt:  " + okt);
+         okt = okt.split("ott=")[1].split("#")[0];
+         
+         //  okt = JSON.stringify(okt);
+         
+         console.log("okt token:  " + okt);
+         
+         url = url.replace("{token}", okt);
+         
+         url = url.split("\"")[0];
+        
+         console.log("fetching user data with url:  " + url);
+         
+         return $http({method: 'GET', url: url})
+         .success(function (data, status, headers, config) {
+        	 $scope.email = data.userProfile.email;
+        	 console.log(data);
+            
+         })
+         .error(function (data, status, headers, config) {
+             console.log(data);
+           //  $scope.fs2Object = data;
+         });
+         
+          
+         
+     }
+
+	// at the bottom of your controller
+	 var init = function () {
+		 $scope.getUserInformation();
+	 };
+	 // and fire it after definition
+	 init();
+	
+	 
         // instantiate and initialize a notification manager
         var notifier = new NotificationManager($scope);
 

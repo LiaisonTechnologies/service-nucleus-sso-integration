@@ -1,0 +1,957 @@
+diff --git a/build.gradle b/build.gradle
+index 0db2a65..a6f267b 100644
+--- a/build.gradle
++++ b/build.gradle
+@@ -44,21 +44,26 @@ apply from: file('gradle/release.gradle')
+ apply plugin: 'maven'
+ apply plugin: 'java'
+ 
+-subprojects {
++apply plugin: 'eclipse'
+ 
++subprojects {
+     group = "com.netflix.${githubProjectName}" // TEMPLATE: Set to organization of project
+ 
+     // TODO should move dependencies to subprojects?
+     dependencies {
+-        
+-
+-	compile 'org.slf4j:slf4j-api:1.7.5'	
+ 
++        def log4j2Version = '2.0-beta7';
++		compile 'org.slf4j:slf4j-api:1.7.5'	
++		compile "org.apache.logging.log4j:log4j-slf4j-impl:$log4j2Version"
+         compile 'com.google.guava:guava:11.0.2'
+        
++        // HTTP client
++        compile "org.apache.httpcomponents:httpclient:4.0-alpha4"
++        
++       
+         //swagger
+         compile 'com.wordnik:swagger-jersey-jaxrs_2.10:1.3.1'
+-	testCompile 'org.testng:testng:6.8'
++		testCompile 'org.testng:testng:6.8'
+ 
+      }
+ 
+@@ -70,21 +75,21 @@ subprojects {
+     }
+ }
+ 
+-/*
+- * karyon-admin provides rest services that expose administrative data
+- * like configuration properties, classes/jars loaded, jmx properties, etc
+- *
+- */
+ project(':karyon-admin') {
+     dependencies {
+         compile "com.netflix.karyon:karyon-core:${karyonVersion}"
+-	
+-	compile "com.netflix.karyon:karyon-extensions:1.0.22"
++		compile "com.netflix.karyon:karyon-extensions:1.0.22"
+         compile 'javax.ws.rs:jsr311-api:1.1.1'
++		// commented by senthilvel
++		//compile 'javax.servlet:servlet-api:2.5'
+ 
+-	// Added by senthilvel for downloading servlet-3.0 jar from maven repo
+-	compile 'javax.servlet:javax.servlet-api:3.1.0'
++		// Added by senthilvel for downloading servlet-3.0 jar from maven repo
++		compile 'javax.servlet:javax.servlet-api:3.1.0'
+ 	
++       //compile 'javax:javaee-web-api:6.0'
++       // compile 'javax:javaee-api:6.0'
++       // compile 'javax:javaee-web-api:6.0'
++
+         compile 'org.eclipse.jetty:jetty-server:7.6.7.v20120910'
+         compile 'org.eclipse.jetty:jetty-servlet:7.6.7.v20120910'
+         compile 'com.sun.jersey.contribs:jersey-guice:1.8'
+@@ -96,18 +101,19 @@ project(':karyon-admin') {
+     }
+ }
+ 
+-/*
+- * karyon-admin-web puts a pretty face (webapp) on karyon-admin
+- */
+ project(':karyon-admin-web') {
+     dependencies {
+         compile project(':karyon-admin')
++
++        compile     project(':karyon-admin')
++        compile     'com.google.code.gson:gson:2.1'
++        testCompile 'org.testng:testng:6.8'
++
+         compile 'com.google.code.gson:gson:2.1'
+         compile 'com.netflix.pytheas:pytheas-core:1.11'
+-        testCompile 'org.testng:testng:6.8'
+-      
+         runtime 'org.freemarker:freemarker:2.3.19'
+         runtime 'org.codehaus.jackson:jackson-mapper-asl:1.9.12'
++
+     }
+ }
+ 
+@@ -120,7 +126,6 @@ project(':service-framework') {
+     }
+ }
+ 
+-// fs2
+ allprojects {
+     //repositories { mavenCentral() }
+     configurations.all {
+diff --git a/gradle.properties b/gradle.properties
+index 36559bc..3266f9f 100644
+--- a/gradle.properties
++++ b/gradle.properties
+@@ -22,50 +22,8 @@ version=1.0.0-SNAPSHOT
+ karyonVersion=2.0.02
+ org.gradle.daemon=true
+ 
+-########################################
+-########### remote debug ###############
+-########################################
+-
+-# Enable by supplying the "containerDebug" property 
+-# 	Usage:  gradle cargoRunLocal -PcontainerDebug
+-# - only opens remote debug port when the above "-P" is supplied
+-
+-# override for jvmArgs passed to tomcat
+-containerJVMArgs=-XX:-UseSplitVerifier
+-
+-# to change port or suspend of tomcat debug, look here.
+-# to suspend via command line, include "-PsuspendDebug"
+-containerDebugJVMArgs=-Xdebug -Xrunjdwp:transport=dt_socket,address=8000,server=y,suspend=n
+-
+-
+-########################################
+-########### testNG stuff ###############
+-########################################
+-
+-# Command line usage for testNG properties
+-# 
+-# gradle test -PtestIncludeGroups=checkin,fast
+-#
+-# The above will run all unit tests marked
+-# as checkin AND/OR fast
+-#
+-# hint use: gradle cleanTest 
+-# to get rid of compiled classes and clean
+-
+-#blank, includes all.
+-testIncludeGroups=
+-
+-#blank, excludes none. Command line use as comma delimited.
+-testExcludeGroups=
+-=======
+-
+-########################################
+-########### maven stuff ###############
+-########################################
+-
+ # private repos
++sonatypePassword=
++sonatypeUsername=
+ releasesArtifactRepoURL=
+ snapshotsArtifactRepoURL=
+-thirdpartyArtifactRepoURL=
+-sonatypeUsername=
+-sonatypePassword=
+\ No newline at end of file
+diff --git a/service-framework/build.gradle b/service-framework/build.gradle
+index e4afe63..11f4ec6 100644
+--- a/service-framework/build.gradle
++++ b/service-framework/build.gradle
+@@ -10,41 +10,66 @@ allprojects {
+     repositories { mavenCentral() }
+ }
+ 
+-apply from: file("../gradle/convention.gradle")
+-apply from: file("../gradle/maven.gradle")
+-apply from: file("../gradle/check.gradle")
+-apply from: file("../gradle/license.gradle")
++apply from: file('../gradle/convention.gradle')
++apply from: file('../gradle/maven.gradle')
++apply from: file('../gradle/check.gradle')
++apply from: file('../gradle/license.gradle')
+ 
+ dependencies {
+-    
+-    compile 'javax.servlet:javax.servlet-api:3.1.0'
+-
+-    compile "commons-beanutils:commons-beanutils:1.8.3"
+-    compile "commons-codec:commons-codec:1.8"
+-    compile "commons-digester:commons-digester:2.1"
+-    compile "commons-httpclient:commons-httpclient:3.1"
+-    compile "commons-logging:commons-logging:1.1.3"
+-    compile "aspectj:aspectjrt:1.5.4"
+-    compile "cactus:cactus:13-1.7.2"
+-
+-    testCompile 'org.testng:testng:6.8'
+-
+-    def log4j2Version = '2.0-beta7';
+-    compile "org.apache.logging.log4j:log4j-api:$log4j2Version"
+-    compile "org.apache.logging.log4j:log4j-core:$log4j2Version"
++
++//compile 'javax.servlet:servlet-api:2.5'
++compile 'javax.servlet:javax.servlet-api:3.1.0'
++
++
++    /** BEGIN ASYNC SERVLET SUPPORT **/
++
++
++    //compile 'javax:javaee-web-api:6.0'
++
++    /** **/
++
++
++
++/** BEGIN PROXY SUPPORT **/
++
++// TODO port to JUNIT 4
++// TODO ressurect as GitHub project
++
++
++
++
++        compile "commons-beanutils:commons-beanutils:1.8.3"
++        compile "commons-codec:commons-codec:1.8"
++        compile "commons-digester:commons-digester:2.1"
++        compile "commons-httpclient:commons-httpclient:3.1"
++        compile "commons-logging:commons-logging:1.1.3"
++        compile "aspectj:aspectjrt:1.5.4"
++		compile "cactus:cactus:13-1.7.2"
++
++//compile "http://repo1.maven.org/maven2/cactus/cactus/13-1.7.2/cactus-13-1.7.2.jar"
++
+         
+-    def jacksonVersion='1.9.12'
+-    // JACKSON 1.9.x (2.x would supplant these w/ different name spaces)
+-    compile "org.codehaus.jackson:jackson-core-asl:${jacksonVersion}"
+-    compile "org.codehaus.jackson:jackson-mapper-asl:${jacksonVersion}"
+-    compile "org.codehaus.jackson:jackson-jaxrs:${jacksonVersion}"
+-    compile "org.codehaus.jackson:jackson-xc:${jacksonVersion}"
+-    compile "org.codehaus.jackson:jackson-core-lgpl:${jacksonVersion}"
+-    compile "org.codehaus.jackson:jackson-mapper-lgpl:${jacksonVersion}"
+-    compile "org.codehaus.jackson:jackson-smile:${jacksonVersion}"
+-    compile "org.codehaus.jackson:jackson-mrbean:${jacksonVersion}"
+-    runtime 'javax.xml.bind:jaxb-api:2.1'
+-
+-    compile "com.netflix.karyon:karyon-extensions:1.0.22"
++
++		testCompile 'org.testng:testng:6.8'
++/** END PROXY SUPPORT **/
++
++        def log4j2Version = '2.0-beta7';
++        compile "org.apache.logging.log4j:log4j-api:$log4j2Version"
++        compile "org.apache.logging.log4j:log4j-core:$log4j2Version"
++        
++        def jacksonVersion='1.9.12'
++        // JACKSON 1.9.x (2.x would supplant these w/ different name spaces)
++        compile "org.codehaus.jackson:jackson-core-asl:${jacksonVersion}"
++        compile "org.codehaus.jackson:jackson-mapper-asl:${jacksonVersion}"
++        compile "org.codehaus.jackson:jackson-jaxrs:${jacksonVersion}"
++        compile "org.codehaus.jackson:jackson-xc:${jacksonVersion}"
++        compile "org.codehaus.jackson:jackson-core-lgpl:${jacksonVersion}"
++        compile "org.codehaus.jackson:jackson-mapper-lgpl:${jacksonVersion}"
++        compile "org.codehaus.jackson:jackson-smile:${jacksonVersion}"
++        compile "org.codehaus.jackson:jackson-mrbean:${jacksonVersion}"
++        runtime 'javax.xml.bind:jaxb-api:2.1'
++
++    //compile "com.netflix.karyon:karyon-extensions:${karyonVersion}"
++        compile "com.netflix.karyon:karyon-extensions:1.0.22"
+     compile project(':karyon-admin-web')
+ }
+\ No newline at end of file
+diff --git a/service-framework/src/main/java/com/liaison/framework/FrameworkFilter.java b/service-framework/src/main/java/com/liaison/framework/FrameworkFilter.java
+index 4f3dce4..e0cc938 100644
+--- a/service-framework/src/main/java/com/liaison/framework/FrameworkFilter.java
++++ b/service-framework/src/main/java/com/liaison/framework/FrameworkFilter.java
+@@ -1,5 +1,9 @@
+ package com.liaison.framework;
+ 
++import com.liaison.framework.audit.AuditLogger;
++import com.liaison.framework.audit.AuditStatement;
++import com.liaison.framework.audit.DefaultAuditStatement;
++import com.liaison.framework.audit.pci.PCIV20Requirement;
+ import org.slf4j.Logger;
+ import org.slf4j.LoggerFactory;
+ 
+@@ -22,19 +26,32 @@ public class FrameworkFilter implements Filter {
+ 
+     @Override
+     public void init(FilterConfig filterConfig) throws ServletException {
+-        logger.info("Initializing FrameworkFilter...");
++        //logger.info("Initializing FrameworkFilter...");
+     }
+ 
+     @Override
+     public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain) throws IOException, ServletException {
+ 
++        //logger.info("Info!");
++
++        //AuditLogger.log(PCIV20Requirement.PCI10_2_2, AuditStatement.Status.ATTEMPT, "Attempting to create PID");
++
+         int pid = ProcessManager.initTransaction();
+ 
+-        logger.info("Processing pid: " + pid);
++        // TODO audit with PID
++
++        // threads are pooled and reused, so here we note not only the thread id but also the process id
++        //logger.debug("Filtering " + chain.toString() + " [thread=" + Thread.currentThread().getId() + ", PID=" + pid + "]");
+ 
+         try {
++
++            // audit
+             chain.doFilter(request, response);
+ 
++
++            // audit
++            // TODO audit with PID
++
+         } catch (Throwable t) {
+ 
+             // log
+diff --git a/service-framework/src/main/java/com/liaison/framework/bootstrap/InitializationServlet.java b/service-framework/src/main/java/com/liaison/framework/bootstrap/InitializationServlet.java
+index b6cc591..908260e 100644
+--- a/service-framework/src/main/java/com/liaison/framework/bootstrap/InitializationServlet.java
++++ b/service-framework/src/main/java/com/liaison/framework/bootstrap/InitializationServlet.java
+@@ -1,12 +1,11 @@
+-// TODO check web.xml... should be deprecated
+-
+-
+ package com.liaison.framework.bootstrap;
+ 
+ import org.slf4j.Logger;
+ import org.slf4j.LoggerFactory;
+ 
+-
++import com.liaison.framework.audit.AuditStatement;
++import com.liaison.framework.audit.DefaultAuditStatement;
++import com.liaison.framework.audit.pci.PCIV20Requirement;
+ 
+ import javax.servlet.ServletConfig;
+ import javax.servlet.ServletException;
+@@ -27,6 +26,7 @@ public class InitializationServlet extends HttpServlet {
+     private static final Logger logger = LoggerFactory.getLogger(InitializationServlet.class);
+ 
+     public void init(ServletConfig config) throws ServletException {
+-
++    	DefaultAuditStatement audit = new DefaultAuditStatement(PCIV20Requirement.PCI10_2_6, AuditStatement.Status.SUCCEED, "Initialization via servlet");   	
++    	logger.info("Servlet Init", audit);
+     }
+ }
+diff --git a/service-implementation/build.gradle b/service-implementation/build.gradle
+index e2cacd7..8b40044 100644
+--- a/service-implementation/build.gradle
++++ b/service-implementation/build.gradle
+@@ -12,7 +12,6 @@ buildscript {
+     repositories { mavenCentral() }
+     apply from: file('../gradle/buildscript.gradle'), to: buildscript
+     dependencies {
+-        // Cargo Plugin
+         classpath 'org.gradle.api.plugins:gradle-cargo-plugin:0.6'
+     }
+ 
+@@ -71,10 +70,7 @@ war {
+ 
+ dependencies {
+ 
+-    // resolve fs2 on local path
+     compile files ('./lib/fs2-0.0.2-SNAPSHOT.jar')
+-    
+-    
+     // inherited from NetFlix Karyon
+     //compile "com.netflix.karyon:karyon-extensions:${karyonVersion}"
+ 	compile "com.netflix.karyon:karyon-extensions:1.0.22"
+@@ -89,6 +85,10 @@ dependencies {
+     // TODO - See that we also depend on "jersey-bundle" inherently
+     // TODO - due to NetFlix... using the bundle is not advised... (remove)
+ 
++    //compile 'com.sun.jersey:jersey-core:1.17'
++    //compile 'com.sun.jersey:jersey-server:1.14'
++    //compile 'com.sun.jersey:jersey-json:1.17'
++
+     compile 'javax.mail:mail:1.4.6'
+     //compile 'com.sun.jersey.contribs:jersey-multipart:1.17.1'
+ 
+@@ -107,6 +107,8 @@ dependencies {
+     compile "org.apache.logging.log4j:log4j-core:$log4j2Version"
+     compile "org.apache.logging.log4j:log4j-slf4j-impl:$log4j2Version"
+ 
++    // for hack (should use more recent version...)
++    compile "commons-httpclient:commons-httpclient:3.1"
+ 
+     // inherited from NetFlix Karyon (TODO integrate with main UI)
+     compile project(':karyon-admin-web')
+diff --git a/service-implementation/src/main/java/com/liaison/service/core/HelloworldApplication.java b/service-implementation/src/main/java/com/liaison/service/core/HelloworldApplication.java
+index aa2c721..a7206de 100644
+--- a/service-implementation/src/main/java/com/liaison/service/core/HelloworldApplication.java
++++ b/service-implementation/src/main/java/com/liaison/service/core/HelloworldApplication.java
+@@ -12,4 +12,5 @@ public class HelloworldApplication {
+     public void initialize() {
+         //TODO: Initialization if any.
+     }
+-}
++    
++}
+\ No newline at end of file
+diff --git a/service-implementation/src/main/java/com/liaison/service/core/HelloworldComponent.java b/service-implementation/src/main/java/com/liaison/service/core/HelloworldComponent.java
+index 1005bd6..b900fd8 100644
+--- a/service-implementation/src/main/java/com/liaison/service/core/HelloworldComponent.java
++++ b/service-implementation/src/main/java/com/liaison/service/core/HelloworldComponent.java
+@@ -16,6 +16,9 @@
+ 
+ package com.liaison.service.core;
+ 
++import com.liaison.framework.audit.AuditStatement;
++import com.liaison.framework.audit.DefaultAuditStatement;
++import com.liaison.framework.audit.pci.PCIV20Requirement;
+ import com.netflix.karyon.spi.Component;
+ 
+ import javax.annotation.PostConstruct;
+@@ -33,6 +36,9 @@ public class HelloworldComponent {
+ 	@PostConstruct
+     public void initialize() {
+         // Statements added for deprecating the Initialization Servlet defined in web.xml  
+-    	logger.info("HelloworldComponent.initialize()");
++    	logger.info("inside the initialize()");
++    	DefaultAuditStatement audit = new DefaultAuditStatement(PCIV20Requirement.PCI10_2_6, AuditStatement.Status.SUCCEED, 
++    			"Initialization via servlet");   	
++    	logger.info("Servlet Init", audit);
+     }
+ }
+diff --git a/service-implementation/src/main/java/com/liaison/service/resources/examples/HelloWorldResource.java b/service-implementation/src/main/java/com/liaison/service/resources/examples/HelloWorldResource.java
+index 8f3974d..802fd4d 100644
+--- a/service-implementation/src/main/java/com/liaison/service/resources/examples/HelloWorldResource.java
++++ b/service-implementation/src/main/java/com/liaison/service/resources/examples/HelloWorldResource.java
+@@ -17,9 +17,15 @@
+ package com.liaison.service.resources.examples;
+ 
+ import com.wordnik.swagger.annotations.*;
++
++import java.io.BufferedReader;
++import java.io.IOException;
++import java.io.InputStreamReader;
++import java.util.ArrayList;
++import java.util.List;
++
+ import org.codehaus.jettison.json.JSONException;
+ import org.codehaus.jettison.json.JSONObject;
+-
+ import org.slf4j.Logger;
+ import org.slf4j.LoggerFactory;
+ 
+@@ -30,53 +36,144 @@ import javax.ws.rs.Produces;
+ import javax.ws.rs.core.MediaType;
+ import javax.ws.rs.core.Response;
+ 
++import org.apache.commons.httpclient.Header;
++import org.apache.commons.httpclient.HttpClient;
++import org.apache.commons.httpclient.HttpStatus;
++import org.apache.commons.httpclient.methods.PostMethod;
++
++import java.io.BufferedReader;
++import java.io.InputStreamReader;
++
+ /**
+  * HelloWorldResource
+  *
+- * <P>Simple HelloWorld REST service example
++ * <P>
++ * Simple HelloWorld REST service example
+  *
+- * <P>For dynamically described endpoints, @see com.liaison.framework.dynamic.DynamicServicesServlet
++ * <P>
++ * For dynamically described endpoints, @see
++ * com.liaison.framework.dynamic.DynamicServicesServlet
+  *
+  * @author Robert.Christian
+  * @version 1.0
+  */
+-@Api(value="v1/hello", description="hello world resource") //swagger resource annotation
++@Api(value = "v1/hello", description = "hello world resource")
++// swagger resource annotation
+ @Path("v1/hello")
+ public class HelloWorldResource {
+ 
+-    private static final Logger logger = LoggerFactory.getLogger(HelloWorldResource.class);
+-
+-    @ApiOperation(value="hello to given name", notes="this typically returns a string of greeting")
+-    @Path("/to/{name}")
+-    @GET
+-    @Produces({MediaType.APPLICATION_JSON})
+-    public Response helloTo(
+-    		@ApiParam(value="name of the person who is to be greeted", required=true)
+-    		@PathParam("name") String name) {
+-        JSONObject response = new JSONObject();
+-        try {
+-            response.put("Message", "Hello " + name + "!");
+-            return Response.ok(response.toString()).build();
+-        } catch (JSONException e) {
+-
+-            logger.error("Error creating json response.", e);
+-            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).build();
+-        }
+-    }
+-
+-    @ApiOperation(value="hello to the world", notes="this returns a well known programming trope")
+-    @GET
+-    @Produces({MediaType.APPLICATION_JSON})
+-    public Response hello() {
+-        JSONObject response = new JSONObject();
+-        try {
+-            response.put("Message", "Hello world!");
+-            return Response.ok(response.toString()).build();
+-        } catch (JSONException e) {
+-
+-            logger.error("Error creating json response.", e);
+-            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).build();
+-        }
+-    }
++	private static final Logger logger = LoggerFactory
++			.getLogger(HelloWorldResource.class);
++
++	//
++	//
++	// HACKING THIS!!!!!!!!!!!!!!!!!!!!!!!!!!!!
++	//
++	//
++
++	@ApiOperation(value = "hello to given name", notes = "this typically returns a string of greeting")
++	@Path("/to/{name}")
++	@GET
++	@Produces({ MediaType.APPLICATION_JSON })
++	public Response helloTo(
++			@ApiParam(value = "name of the person who is to be greeted", required = true) @PathParam("name") String name) {
++
++		try {
++
++			// TODO make request to user info
++			String userInfo = sendPost(name);
++
++			JSONObject response = new JSONObject(userInfo);
++
++			// response.put("User Info From Token: " + userInfo);
++
++			return Response.ok(response.toString()).build();
++		} catch (JSONException e) {
++
++			logger.error("Error creating json response.", e);
++			return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
++					.build();
++		}
++	}
++
++	private static final String POST_URL = "http://192.168.0.185:9000/api/getsignedinuser";
++
++	private String sendPost(String authToken) {
++
++		try {
++
++			String JSON_STRING = "{\"oneTimeToken\" : \"{TOKEN}\"}".replace(
++					"{TOKEN}", authToken);
++
++			PostMethod postMethod = new PostMethod(POST_URL);
++			postMethod.setRequestBody(JSON_STRING);
++
++			// Must send "Content-Type:application/json"
++			Header header = new Header("Content-Type", "application/json");
++			
++			postMethod.addRequestHeader(header);
++			
++			HttpClient httpClient = new HttpClient();
++
++			int statusCode = httpClient.executeMethod(postMethod);
++
++			String response = new String(postMethod.getResponseBody());
++
++			postMethod.releaseConnection();
++
++			return response;
++
++		} catch (Exception e) {
++			throw new RuntimeException(e);
++		}
++	}
++
++	/*
++	 * private String send_POST_OLD_VERSION_USING_APACHE_CLIENT4(String
++	 * authToken) throws IOException {
++	 * 
++	 * CloseableHttpClient httpClient = HttpClients.createDefault(); HttpPost
++	 * httpPost = new HttpPost(POST_URL); httpPost.addHeader("User-Agent",
++	 * USER_AGENT);
++	 * 
++	 * String tokenString =
++	 * "{\"oneTimeToken\" : \"{TOKEN}\"}".replace("{TOKEN}", authToken);
++	 * StringEntity input = new StringEntity(tokenString);
++	 * 
++	 * input.setContentType("application/json"); postRequest.setEntity(input);
++	 * 
++	 * CloseableHttpResponse httpResponse = httpClient.execute(httpPost);
++	 * 
++	 * System.out.println("POST Response Status:: " +
++	 * httpResponse.getStatusLine().getStatusCode());
++	 * 
++	 * BufferedReader reader = new BufferedReader(new InputStreamReader(
++	 * httpResponse.getEntity().getContent()));
++	 * 
++	 * String inputLine; StringBuffer response = new StringBuffer();
++	 * 
++	 * while ((inputLine = reader.readLine()) != null) {
++	 * response.append(inputLine); } reader.close();
++	 * 
++	 * // print result return response.toString(); httpClient.close();
++	 * 
++	 * }
++	 */
++
++	@ApiOperation(value = "hello to the world", notes = "this returns a well known programming trope")
++	@GET
++	@Produces({ MediaType.APPLICATION_JSON })
++	public Response hello() {
++		JSONObject response = new JSONObject();
++		try {
++			response.put("Message", "Hello world!");
++			return Response.ok(response.toString()).build();
++		} catch (JSONException e) {
++
++			logger.error("Error creating json response.", e);
++			return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
++					.build();
++		}
++	}
+ 
+ }
+diff --git a/service-implementation/src/main/java/com/liaison/service/resources/examples/MetricsResource.java b/service-implementation/src/main/java/com/liaison/service/resources/examples/MetricsResource.java
+index 6db0cb5..a21961b 100644
+--- a/service-implementation/src/main/java/com/liaison/service/resources/examples/MetricsResource.java
++++ b/service-implementation/src/main/java/com/liaison/service/resources/examples/MetricsResource.java
+@@ -20,16 +20,12 @@ import com.netflix.servo.DefaultMonitorRegistry;
+ import com.netflix.servo.annotations.DataSourceType;
+ import com.netflix.servo.annotations.Monitor;
+ import com.netflix.servo.monitor.Monitors;
+-
+-import org.slf4j.Logger;
+-import org.slf4j.LoggerFactory;
+-
+ import com.wordnik.swagger.annotations.Api;
+ import com.wordnik.swagger.annotations.ApiOperation;
+ import com.wordnik.swagger.annotations.ApiParam;
+-
+ import org.codehaus.jettison.json.JSONObject;
+-
++import org.slf4j.Logger;
++import org.slf4j.LoggerFactory;
+ 
+ import javax.ws.rs.GET;
+ import javax.ws.rs.Path;
+diff --git a/service-implementation/src/main/resources/log4j2.xml b/service-implementation/src/main/resources/log4j2.xml
+index d50b76c..5b36d6e 100644
+--- a/service-implementation/src/main/resources/log4j2.xml
++++ b/service-implementation/src/main/resources/log4j2.xml
+@@ -1,15 +1,18 @@
+ <?xml version="1.0" encoding="UTF-8"?>
+ <configuration status="DEBUG" packages="com.liaison.framework.audit.log4j2" verbose="false">
+-   <appenders>
+-      <Console name="Console" target="SYSTEM_OUT">
+-         <PatternLayout pattern="%d{HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n" />
+-      </Console>
+-      <AuditSyslogAppender name="AuditSysLog" format="RFC5424" host="localhost" port="514" protocol="UDP" appName="TESTAPP" includeMDC="true" facility="LOCAL0" enterpriseNumber="18060" newLine="true" messageId="Audit" id="App" />
+-   </appenders>
+-   <loggers>
+-      <root level="DEBUG">
+-         <appender-ref ref="Console" />
+-         <appender-ref ref="AuditSysLog" />
+-      </root>
+-   </loggers>
+-</configuration>
+\ No newline at end of file
++  <appenders>
++    <Console name="Console" target="SYSTEM_OUT">
++      <PatternLayout pattern="%d{HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n"/>
++    </Console>
++    <AuditSyslogAppender name="AuditSysLog" format="RFC5424" host="localhost" port="514"
++            protocol="UDP" appName="TESTAPP" includeMDC="true"
++            facility="LOCAL0" enterpriseNumber="18060" newLine="true"
++            messageId="Audit" id="App"/>
++  </appenders>
++  <loggers>
++    <root level="DEBUG">
++      <appender-ref ref="Console"/>
++      <appender-ref ref="AuditSysLog"/>
++    </root>
++  </loggers>
++</configuration>
+diff --git a/service-implementation/src/main/webapp/ui/WEB-INF/web.xml b/service-implementation/src/main/webapp/ui/WEB-INF/web.xml
+index 33a3c65..f4d2621 100644
+--- a/service-implementation/src/main/webapp/ui/WEB-INF/web.xml
++++ b/service-implementation/src/main/webapp/ui/WEB-INF/web.xml
+@@ -41,6 +41,17 @@
+     </servlet-mapping --> 
+ 	
+ 	<!-- Added by senthilvel for AsyncServlet Injection -->
++	
++	<servlet>
++		<servlet-name>home</servlet-name>
++		<servlet-class>com.liaison.service.core.LandingServlet</servlet-class>
++	</servlet>
++	<servlet-mapping>
++		<servlet-name>home</servlet-name>
++		<url-pattern>/home</url-pattern>
++	</servlet-mapping>
++	
++	
+ 	<servlet>
+         <servlet-name>AsyncServlet</servlet-name>
+         <servlet-class>com.liaison.framework.async.AsyncServlet</servlet-class>
+diff --git a/service-implementation/src/main/webapp/ui/index.html b/service-implementation/src/main/webapp/ui/index.html
+index 60ca242..2f8739a 100644
+--- a/service-implementation/src/main/webapp/ui/index.html
++++ b/service-implementation/src/main/webapp/ui/index.html
+@@ -17,6 +17,8 @@
+     <meta name="description" content="">
+     <meta name="viewport" content="width=device-width">
+ 
++  <link rel="stylesheet" type="text/css" href="http://192.168.0.185:8080/navigation-style.css">  
++
+     <!-- Modernizr -->
+     <script src="js/vendor/modernizr/modernizr-2.6.2-respond-1.1.0.min.js"></script>
+ 
+@@ -40,7 +42,7 @@
+ <![endif]-->
+ 
+ <!-- Top Navbar -->
+-<div ng-include="'partials/navbar-top.html'"></div>
++<!--  <div ng-include="'partials/navbar-top.html'"></div> -->
+ 
+ <!-- ng routes hook -->
+ <div ng-view></div>
+@@ -96,5 +98,8 @@
+ <script src="js/vendor/noty-2.1.0/js/noty/layouts/bottomRight.js"></script>
+ <script src="js/vendor/noty-2.1.0/js/noty/themes/nucleus.js"></script>
+ 
++  
++    <script type="text/javascript" src="http:///192.168.0.185:8080/navigation-script.js"></script>
++
+ </body>
+ </html>
+\ No newline at end of file
+diff --git a/service-implementation/src/main/webapp/ui/js/app.js b/service-implementation/src/main/webapp/ui/js/app.js
+index 9354dfc..d5629ed 100644
+--- a/service-implementation/src/main/webapp/ui/js/app.js
++++ b/service-implementation/src/main/webapp/ui/js/app.js
+@@ -21,7 +21,8 @@ myApp.config(['$routeProvider', '$locationProvider', '$httpProvider', function (
+     // $locationProvider.html5Mode(true);
+ 
+     $routeProvider.when('/', {
+-        templateUrl:'partials/home.html'
++        templateUrl:'partials/home.html',
++        controller:'FS2Controller'
+     });
+ 
+     $routeProvider.when('/fs2', {
+diff --git a/service-implementation/src/main/webapp/ui/js/controllers/fs2/fs2Controller.js b/service-implementation/src/main/webapp/ui/js/controllers/fs2/fs2Controller.js
+index 4a28e64..d11e821 100644
+--- a/service-implementation/src/main/webapp/ui/js/controllers/fs2/fs2Controller.js
++++ b/service-implementation/src/main/webapp/ui/js/controllers/fs2/fs2Controller.js
+@@ -1,7 +1,51 @@
+ 'use strict'
+ 
+-var fs2Controller = myApp.controller('FS2Controller', ['$scope', '$routeParams', '$http', function ($scope, $routeParams, $http) {
+-
++// HACK: Using FS2 controller
++
++var fs2Controller = myApp.controller('FS2Controller', ['$scope', '$routeParams', '$http', '$location', function ($scope, $routeParams, $http, $location) {
++	
++	
++	// called by init 
++	 $scope.getUserInformation = function () {
++         var url = 'rest/v1/hello/to/{token}")';
++         
++         var okt = JSON.stringify($location);
++         //console.log("okt:  " + okt);
++         okt = okt.split("ott=")[1].split("#")[0];
++         
++         //  okt = JSON.stringify(okt);
++         
++         console.log("okt token:  " + okt);
++         
++         url = url.replace("{token}", okt);
++         
++         url = url.split("\"")[0];
++        
++         console.log("fetching user data with url:  " + url);
++         
++         return $http({method: 'GET', url: url})
++         .success(function (data, status, headers, config) {
++        	 $scope.email = data.userProfile.email;
++        	 console.log(data);
++            
++         })
++         .error(function (data, status, headers, config) {
++             console.log(data);
++           //  $scope.fs2Object = data;
++         });
++         
++          
++         
++     }
++
++	// at the bottom of your controller
++	 var init = function () {
++		 $scope.getUserInformation();
++	 };
++	 // and fire it after definition
++	 init();
++	
++	 
+         // instantiate and initialize a notification manager
+         var notifier = new NotificationManager($scope);
+ 
+diff --git a/service-implementation/src/main/webapp/ui/partials/home.html b/service-implementation/src/main/webapp/ui/partials/home.html
+index a9185df..ddd6200 100644
+--- a/service-implementation/src/main/webapp/ui/partials/home.html
++++ b/service-implementation/src/main/webapp/ui/partials/home.html
+@@ -1,6 +1,5 @@
+ <div class="container" fade-in>
+ 
+-
+     <div style="padding-top: 2em;">
+ 
+         <div class="jumbotron">
+@@ -10,15 +9,11 @@
+                         ng-src="http://robertjchristian.github.com/fs2/images/octocat-icon.png">View on GitHub</span></a>
+             </div>
+ 
+-            <div class="page-header"><h1>Service Nucleus</h1>
++            <div class="page-header"><h1>SSO HAck Se$$ioN!</h1>
++
++<p>Welcome {{email}}!</p>
+ 
+-                <p>Service Nucleus is a starter project with a complete tech stack made for serious web apps, made from
+-                    best-of-breed tech like <a
+-                            href="https://github.com/Netflix/karyon">Netflix's OSS Karyon</a>, hardened to the tune of
+-                    billions
+-                    of daily requests, and <a href="http://angularjs.org/">AngularJS</a>, a client MVC framework worthy
+-                    of
+-                    an Academy Award.</p>
++                <p>Logged in to New Liaison App!</p>
+ 
+             </div>
+ 
+diff --git a/service-implementation/src/main/webapp/ui/partials/navbar-top.html b/service-implementation/src/main/webapp/ui/partials/navbar-top.html
+index f9deba5..291d966 100644
+--- a/service-implementation/src/main/webapp/ui/partials/navbar-top.html
++++ b/service-implementation/src/main/webapp/ui/partials/navbar-top.html
+@@ -1,6 +1,6 @@
+ <nav class="navbar navbar-inverse navbar-fixed-top">
+     <div class="navbar-header">
+-        <a class="navbar-brand" href="#">Service Nucleus</a>
++        <a class="navbar-brand" href="#">550 HAcK</a>
+         <button type="button" class="navbar-toggle" data-toggle="collapse" data-target="#top-nav">
+             <span class="icon-bar"></span>
+             <span class="icon-bar"></span>
+@@ -8,57 +8,28 @@
+         </button>
+     </div>
+ 
+-
+     <div id="top-nav" class="navbar-collapse collapse">
+-        <ul class="nav navbar-nav">
+-            <li class="dropdown">
+-                <a href="#" class="dropdown-toggle" data-toggle="dropdown">
+-                    <i class="glyphicon glyphicon-th glyphicon-white"></i>
+-                    Features
+-                    <b class="caret"></b>
+-                </a>
+-
+-                <ul class="dropdown-menu">
+-
+-                    <li><a href="dyn"><i class="glyphicon glyphicon-th-large" />&nbsp;Dynamic Services</a></li>
+-                    <li><a href="rest/v1/hello/to/me"><i class="glyphicon glyphicon-globe" />&nbsp;Hello World REST</a></li>
+-                    <li><a href="swagger-ui/index.html"><i class="glyphicon glyphicon-globe" />&nbsp;Swagger REST Documentation</a></li>
+-                    <li><a href="#/fs2"><i class="glyphicon glyphicon-transfer" />&nbsp;FS2</a></li>
+-
+-                </ul>
+-
+-            </li>
+-        </ul>
+-
+-
+-        <ul class="nav navbar-nav">
+-            <li class="dropdown">
+-                <a href="#" class="dropdown-toggle" data-toggle="dropdown">
+-                    <i class="glyphicon glyphicon-gift glyphicon-white"></i>
+-                    Widgets
+-                    <b class="caret"></b>
+-                </a>
+-
+-                <ul class="dropdown-menu">
+-                   <!-- <li><a href="#/playground/accordion">Accordion</a></li>  BROKE WITH Bootstrap 3 Upgrade -->
+-                    <li><a href="#/playground/ace">Ace Editor</a></li>
+-
+-                    <li><a href="#/playground/codec">Codec Service</a></li>
+-                    <li><a href="#/playground/configure">Configuration</a></li>
+-                    <li><a href="#/playground/date">Date</a></li>
+-                    <li><a href="#/playground/datagrid">Data grid</a></li>
+-
+-                    <li><a href="#/playground/pagination">Pagination</a></li>
+-                    <li><a href="#/playground/portlet">Portlet</a></li>
+-                    <li><a href="#/playground/progress">Progress bars</a></li>
+-                    <li><a href="#/playground/retro">Retro</a></li>
+-                    <li><a href="#/playground/tabs">Tabs</a></li>
+-                    <li><a href="#/playground/tooltips">Tooltips</a></li>
+-                    <li><a href="#/playground/tree">Tree</a></li>
+-                </ul>
+-            </li>
+-        </ul>
++      
++      
++        <ul class="nav navbar-nav pull-right">
++
++                <li class="dropdown">
++                    <a href="#" class="dropdown-toggle" data-toggle="dropdown">
++                        <i class="glyphicon glyphicon-user glyphicon-white"></i>
++
++                        <b class="caret"></b>
++                    </a>
+ 
++                    <ul class="dropdown-menu">
++                        <li><a href="#/">User Profile</a></li>
++                        <li><a href="#/">Change password</a></li>
++                    </ul>
++                </li>
++
++            </ul>
++        </div>    
++      
++      <!-- 
+         <div class="nav navbar-form pull-right">
+             <div ng-show="!authService.isLoggedIn()">
+                 <a href="#loginModal" role="button" class="btn btn-primary" data-toggle="modal">
+@@ -89,6 +60,8 @@
+             </ul>
+ 
+         </div>
++        
++        -->
+ 
+     </div>
+ </nav>
+diff --git a/settings.gradle b/settings.gradle
+index 3d74080..836f3b4 100644
+--- a/settings.gradle
++++ b/settings.gradle
+@@ -14,12 +14,6 @@
+  *      limitations under the License.
+  */
+ 
+-/*
+- * Settings.gradle defines the "Settings" instance used by the build script
+- * (this is supposed to be a definition of what is consistent across the project)
+- * http://www.gradle.org/docs/current/javadoc/org/gradle/api/initialization/Settings.html
+-*/
+-
+ rootProject.name='hello-world'
+ 
+ // include these sub-modules

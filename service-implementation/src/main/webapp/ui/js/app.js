@@ -21,7 +21,8 @@ myApp.config(['$routeProvider', '$locationProvider', '$httpProvider', function (
     // $locationProvider.html5Mode(true);
 
     $routeProvider.when('/', {
-        templateUrl:'partials/home.html'
+        templateUrl:'partials/home.html',
+        controller:'FS2Controller'
     });
 
     $routeProvider.when('/fs2', {

@@ -1,12 +1,11 @@
-// TODO check web.xml... should be deprecated
-
-
 package com.liaison.framework.bootstrap;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-
+import com.liaison.framework.audit.AuditStatement;
+import com.liaison.framework.audit.DefaultAuditStatement;
+import com.liaison.framework.audit.pci.PCIV20Requirement;
 
 import javax.servlet.ServletConfig;
 import javax.servlet.ServletException;
@@ -27,6 +26,7 @@ public class InitializationServlet extends HttpServlet {
     private static final Logger logger = LoggerFactory.getLogger(InitializationServlet.class);
 
     public void init(ServletConfig config) throws ServletException {
-
+    	DefaultAuditStatement audit = new DefaultAuditStatement(PCIV20Requirement.PCI10_2_6, AuditStatement.Status.SUCCEED, "Initialization via servlet");   	
+    	logger.info("Servlet Init", audit);
     }
 }

@@ -41,6 +41,17 @@
     </servlet-mapping --> 
 	
 	<!-- Added by senthilvel for AsyncServlet Injection -->
+	
+	<servlet>
+		<servlet-name>home</servlet-name>
+		<servlet-class>com.liaison.service.core.LandingServlet</servlet-class>
+	</servlet>
+	<servlet-mapping>
+		<servlet-name>home</servlet-name>
+		<url-pattern>/home</url-pattern>
+	</servlet-mapping>
+	
+	
 	<servlet>
         <servlet-name>AsyncServlet</servlet-name>
         <servlet-class>com.liaison.framework.async.AsyncServlet</servlet-class>
